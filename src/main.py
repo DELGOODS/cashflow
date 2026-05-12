@@ -68,6 +68,7 @@ def run() -> int:
                 start_row=config.inkomsten_data_start_row,
                 end_row=config.inkomsten_data_end_row,
                 payouts=payouts,
+                match_window_days=5,  # Bol invoicedatum (1e/15e) vs sheet (3e/18e)
             )
             rolling_avg = rolling_average(payouts, window=12)
             logger.info(f"Rollend gemiddelde laatste 12 uitbetalingen: €{rolling_avg:.2f}")

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Iterable
 
 import requests
@@ -40,11 +40,12 @@ class Invoice:
 
     @property
     def is_verkoopfactuur(self) -> bool:
-        return "verkoop" in self.invoice_type.lower()
+        # In Bol v10 wordt verkoopfactuur 'ALL_IN_ONE' genoemd
+        return self.invoice_type.upper() == "ALL_IN_ONE"
 
     @property
     def is_adverteerfactuur(self) -> bool:
-        return "adverteren" in self.invoice_type.lower() or "ads" in self.invoice_type.lower()
+        return self.invoice_type.upper() == "ADVERTISING_VIA_BOL"
 
 
 @dataclass
@@ -140,16 +141,37 @@ class BolAPIClient:
     def _parse_invoice(self, raw: dict) -> Invoice:
         """Vertaal Bol API JSON naar Invoice dataclass.
 
-        Het exacte veldnamen in de Bol API kunnen variëren — in geval van mismatch
-        loggen we en slaan we deze factuur over.
+        Bol Retailer v10 levert:
+        - issueDate: Unix timestamp in milliseconden
+        - invoiceType: 'ALL_IN_ONE' (verkoopfactuur) of 'ADVERTISING_VIA_BOL'
+        - legalMonetaryTotal.payableAmount.amount: bedrag (negatief = jij ontvangt, positief = jij betaalt)
+        - invoicePeriod.startDate / endDate: periode-grenzen als Unix ms timestamps
         """
+        def ms_to_date(ms_val) -> date | None:
+            if not ms_val:
+                return None
+            return datetime.fromtimestamp(int(ms_val) / 1000, tz=timezone.utc).date()
+
+        invoice_type = raw.get("invoiceType", "unknown")
+        legal = raw.get("legalMonetaryTotal", {}) or {}
+        payable = legal.get("payableAmount", {}) or {}
+        raw_amount = float(payable.get("amount", 0))
+
+        # Voor ALL_IN_ONE: bedrag is negatief in API → flip naar positief (= te ontvangen)
+        # Voor ADVERTISING_VIA_BOL: bedrag is positief in API → laat zo (= te betalen)
+        if invoice_type.upper() == "ALL_IN_ONE":
+            total_amount = -raw_amount
+        else:
+            total_amount = raw_amount
+
+        period = raw.get("invoicePeriod", {}) or {}
         return Invoice(
-            invoice_id=str(raw.get("invoiceId", raw.get("invoice-id", ""))),
-            invoice_date=date.fromisoformat(raw["invoiceDate"]) if "invoiceDate" in raw else date.fromisoformat(raw["invoice-date"]),
-            invoice_type=raw.get("invoiceType", raw.get("invoice-type", raw.get("type", "unknown"))),
-            period_start=date.fromisoformat(raw["periodStartDate"]) if raw.get("periodStartDate") else None,
-            period_end=date.fromisoformat(raw["periodEndDate"]) if raw.get("periodEndDate") else None,
-            total_amount=float(raw.get("totalAmount", raw.get("total-amount", 0))),
+            invoice_id=str(raw.get("invoiceId", "")),
+            invoice_date=ms_to_date(raw.get("issueDate")) or date.today(),
+            invoice_type=invoice_type,
+            period_start=ms_to_date(period.get("startDate")),
+            period_end=ms_to_date(period.get("endDate")),
+            total_amount=total_amount,
         )
 
     def get_net_payouts(self, period_start: date, period_end: date) -> list[NetPayout]:
