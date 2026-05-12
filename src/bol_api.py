@@ -93,32 +93,49 @@ class BolAPIClient:
             "Accept": ACCEPT_HEADER,
         }
 
-    def list_invoices(self, period_start: date, period_end: date) -> list[Invoice]:
-        """Haal alle facturen op binnen een periode.
+    def list_invoices_for_month(self, year: int, month: int) -> list[Invoice]:
+        """Haal alle facturen op voor één kalendermaand.
 
-        Bol API endpoint: GET /retailer/invoices?period-start-date=YYYY-MM-DD&period-end-date=YYYY-MM-DD
+        Bol API endpoint: GET /retailer/invoices?period=YYYY-MM
         """
-        logger.info(f"Bol API: facturen ophalen {period_start} t/m {period_end}")
+        period = f"{year:04d}-{month:02d}"
+        logger.info(f"Bol API: facturen ophalen voor periode {period}")
         response = self._session.get(
             f"{API_BASE}/invoices",
             headers=self._headers(),
-            params={
-                "period-start-date": period_start.isoformat(),
-                "period-end-date": period_end.isoformat(),
-            },
+            params={"period": period},
             timeout=30,
         )
+        if response.status_code == 404:
+            # Geen facturen voor deze maand
+            logger.info(f"Bol API: geen facturen gevonden voor {period}")
+            return []
         response.raise_for_status()
         body = response.json()
 
         invoices: list[Invoice] = []
-        for raw in body.get("invoiceListItems", []):
+        for raw in body.get("invoiceListItems", body.get("invoices", [])):
             try:
                 invoices.append(self._parse_invoice(raw))
             except (KeyError, ValueError) as e:
                 logger.warning(f"Kon factuur niet parsen: {raw}, error: {e}")
-        logger.info(f"Bol API: {len(invoices)} facturen ontvangen")
+        logger.info(f"Bol API: {len(invoices)} facturen ontvangen voor {period}")
         return invoices
+
+    def list_invoices(self, period_start: date, period_end: date) -> list[Invoice]:
+        """Haal facturen op over een datumbereik door per maand te queryen."""
+        all_invoices: list[Invoice] = []
+        current_year, current_month = period_start.year, period_start.month
+        end_year, end_month = period_end.year, period_end.month
+        while (current_year, current_month) <= (end_year, end_month):
+            all_invoices.extend(self.list_invoices_for_month(current_year, current_month))
+            # Volgende maand
+            if current_month == 12:
+                current_year += 1
+                current_month = 1
+            else:
+                current_month += 1
+        return all_invoices
 
     def _parse_invoice(self, raw: dict) -> Invoice:
         """Vertaal Bol API JSON naar Invoice dataclass.
