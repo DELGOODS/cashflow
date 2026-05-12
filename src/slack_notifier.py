@@ -1,4 +1,4 @@
-"""Slack notifier — V1: incoming webhook met directe link naar banksaldo-cel.
+"""Slack notifier — V1: incoming webhook met directe link naar Vercel cashflow dashboard.
 
 Roep `send_banksaldo_reminder` aan na een succesvolle Bol-update om de
 gebruiker eraan te herinneren zijn banksaldo bij te werken.
@@ -12,13 +12,15 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+DASHBOARD_URL = "https://delgoods-bol-dashboard.vercel.app/cashflow"
+
 
 def build_sheet_link(sheet_id: str, range_a1: str) -> str:
-    """URL die opent op een specifiek bereik in de sheet.
+    """Fallback: URL naar een specifiek bereik in de sheet.
 
-    Gebruik gid=0 als algemene fallback; de range-parameter zorgt dat
-    de juiste cel geselecteerd wordt nadat de gebruiker naar het tabblad
-    is genavigeerd.
+    Wordt momenteel niet gebruikt — we linken direct naar het Vercel dashboard
+    waar banksaldo via UI ingevoerd én opgeslagen kan worden. Behouden voor
+    backwards compatibiliteit als we ooit toch naar de sheet willen linken.
     """
     return f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit?range={range_a1}"
 
@@ -32,9 +34,12 @@ def send_banksaldo_reminder(
 ) -> None:
     """Verstuur de wekelijkse banksaldo-reminder naar Slack.
 
-    Block Kit-formaat: header + intro + actie-knop + context-info met laatste update.
+    Block Kit-formaat: header + intro + actie-knop naar dashboard + context-info.
+    De `sheet_id` en `banksaldo_cell` parameters blijven aanwezig voor backwards
+    compatibility, maar de knop linkt nu naar het Vercel dashboard.
     """
-    link = build_sheet_link(sheet_id, banksaldo_cell)
+    link = DASHBOARD_URL
+    del sheet_id, banksaldo_cell  # niet meer gebruikt sinds switch naar dashboard
     _DUTCH_MONTHS = {
         1: "januari", 2: "februari", 3: "maart", 4: "april",
         5: "mei", 6: "juni", 7: "juli", 8: "augustus",
@@ -64,7 +69,8 @@ def send_banksaldo_reminder(
                 "text": (
                     f"Goedemorgen, het is {today}. "
                     "Tijd om je banksaldo bij te werken voor de cashflowprognose. "
-                    "Klik op de knop hieronder, je springt direct naar de juiste cel."
+                    "Klik op de knop hieronder om direct in het cashflow-dashboard "
+                    "je actuele saldo in te voeren en op te slaan."
                 ),
             },
         },
@@ -73,7 +79,7 @@ def send_banksaldo_reminder(
             "elements": [
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "Banksaldo invullen"},
+                    "text": {"type": "plain_text", "text": "Open cashflow dashboard"},
                     "url": link,
                     "style": "primary",
                 }
