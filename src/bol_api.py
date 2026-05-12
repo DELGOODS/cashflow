@@ -124,19 +124,32 @@ class BolAPIClient:
         return invoices
 
     def list_invoices(self, period_start: date, period_end: date) -> list[Invoice]:
-        """Haal facturen op over een datumbereik door per maand te queryen."""
+        """Haal facturen op over een datumbereik door per maand te queryen.
+
+        Bol's ?period=YYYY-MM filter is in praktijk onbetrouwbaar; we dedupliceren
+        daarom op invoice_id om dubbele facturen te voorkomen.
+        """
         all_invoices: list[Invoice] = []
+        seen_ids: set[str] = set()
         current_year, current_month = period_start.year, period_start.month
         end_year, end_month = period_end.year, period_end.month
         while (current_year, current_month) <= (end_year, end_month):
-            all_invoices.extend(self.list_invoices_for_month(current_year, current_month))
-            # Volgende maand
+            for inv in self.list_invoices_for_month(current_year, current_month):
+                if inv.invoice_id and inv.invoice_id not in seen_ids:
+                    seen_ids.add(inv.invoice_id)
+                    all_invoices.append(inv)
             if current_month == 12:
                 current_year += 1
                 current_month = 1
             else:
                 current_month += 1
-        return all_invoices
+        # Filter ook op datum-bereik client-side
+        filtered = [
+            inv for inv in all_invoices
+            if inv.invoice_date and period_start <= inv.invoice_date <= period_end
+        ]
+        logger.info(f"Bol API: {len(filtered)} unieke facturen in periode {period_start} t/m {period_end}")
+        return filtered
 
     def _parse_invoice(self, raw: dict) -> Invoice:
         """Vertaal Bol API JSON naar Invoice dataclass.
