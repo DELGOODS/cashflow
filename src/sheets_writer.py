@@ -110,6 +110,16 @@ class SheetsWriter:
         logger.info(f"Sheets: {len(updates)} werkelijke uitbetalingen geschreven")
         return len(updates)
 
+    def write_value(self, cell_a1: str, value) -> None:
+        """Schrijf één waarde naar een cel via batchUpdate."""
+        self._values().update(
+            spreadsheetId=self.sheet_id,
+            range=cell_a1,
+            valueInputOption="USER_ENTERED",
+            body={"values": [[value]]},
+        ).execute()
+        logger.info(f"Sheets: cel {cell_a1} bijgewerkt met {value}")
+
     @staticmethod
     def _find_closest(
         target: date, candidates: list[tuple[int, date]], window_days: int

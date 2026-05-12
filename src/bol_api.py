@@ -95,60 +95,71 @@ class BolAPIClient:
         }
 
     def list_invoices_for_month(self, year: int, month: int) -> list[Invoice]:
-        """Haal alle facturen op voor één kalendermaand.
-
-        Bol API endpoint: GET /retailer/invoices?period=YYYY-MM
-        """
+        """Haal alle facturen op voor één kalendermaand, met pagination."""
         period = f"{year:04d}-{month:02d}"
-        logger.info(f"Bol API: facturen ophalen voor periode {period}")
-        response = self._session.get(
-            f"{API_BASE}/invoices",
-            headers=self._headers(),
-            params={"period": period},
-            timeout=30,
-        )
-        if response.status_code == 404:
-            # Geen facturen voor deze maand
-            logger.info(f"Bol API: geen facturen gevonden voor {period}")
-            return []
-        response.raise_for_status()
-        body = response.json()
+        return self._fetch_invoices_with_pagination(params={"period": period}, label=period)
 
+    def list_invoices_all_pages(self) -> list[Invoice]:
+        """Haal alle facturen op zonder period-filter, alle pages."""
+        return self._fetch_invoices_with_pagination(params={}, label="alle")
+
+    def _fetch_invoices_with_pagination(self, params: dict, label: str) -> list[Invoice]:
+        """Itereer door alle pages tot een lege response komt."""
         invoices: list[Invoice] = []
-        for raw in body.get("invoiceListItems", body.get("invoices", [])):
-            try:
-                invoices.append(self._parse_invoice(raw))
-            except (KeyError, ValueError) as e:
-                logger.warning(f"Kon factuur niet parsen: {raw}, error: {e}")
-        logger.info(f"Bol API: {len(invoices)} facturen ontvangen voor {period}")
+        page = 1
+        max_pages = 50  # safety cap
+        while page <= max_pages:
+            page_params = {**params, "page": page}
+            logger.info(f"Bol API: facturen ophalen {label} page {page}")
+            response = self._session.get(
+                f"{API_BASE}/invoices",
+                headers=self._headers(),
+                params=page_params,
+                timeout=30,
+            )
+            if response.status_code == 404:
+                logger.info(f"Bol API: page {page} niet gevonden, stop")
+                break
+            response.raise_for_status()
+            body = response.json()
+            items = body.get("invoiceListItems", body.get("invoices", []))
+            if not items:
+                logger.info(f"Bol API: page {page} leeg, stop")
+                break
+
+            parsed_count = 0
+            for raw in items:
+                try:
+                    invoices.append(self._parse_invoice(raw))
+                    parsed_count += 1
+                except (KeyError, ValueError) as e:
+                    logger.warning(f"Kon factuur niet parsen: {raw}, error: {e}")
+            logger.info(f"Bol API: {parsed_count} facturen op page {page} (totaal: {len(invoices)})")
+            if len(items) < 50:
+                # Minder dan vol page = dit was de laatste
+                break
+            page += 1
         return invoices
 
     def list_invoices(self, period_start: date, period_end: date) -> list[Invoice]:
-        """Haal facturen op over een datumbereik door per maand te queryen.
-
-        Bol's ?period=YYYY-MM filter is in praktijk onbetrouwbaar; we dedupliceren
-        daarom op invoice_id om dubbele facturen te voorkomen.
-        """
-        all_invoices: list[Invoice] = []
+        """Haal facturen op via pagination en filter client-side op datumbereik."""
+        all_invoices = self.list_invoices_all_pages()
+        # Dedup op invoice_id
         seen_ids: set[str] = set()
-        current_year, current_month = period_start.year, period_start.month
-        end_year, end_month = period_end.year, period_end.month
-        while (current_year, current_month) <= (end_year, end_month):
-            for inv in self.list_invoices_for_month(current_year, current_month):
-                if inv.invoice_id and inv.invoice_id not in seen_ids:
-                    seen_ids.add(inv.invoice_id)
-                    all_invoices.append(inv)
-            if current_month == 12:
-                current_year += 1
-                current_month = 1
-            else:
-                current_month += 1
-        # Filter ook op datum-bereik client-side
+        unique: list[Invoice] = []
+        for inv in all_invoices:
+            if inv.invoice_id and inv.invoice_id not in seen_ids:
+                seen_ids.add(inv.invoice_id)
+                unique.append(inv)
+        # Filter op datum-bereik
         filtered = [
-            inv for inv in all_invoices
+            inv for inv in unique
             if inv.invoice_date and period_start <= inv.invoice_date <= period_end
         ]
-        logger.info(f"Bol API: {len(filtered)} unieke facturen in periode {period_start} t/m {period_end}")
+        logger.info(
+            f"Bol API: {len(unique)} unieke facturen totaal, {len(filtered)} in periode "
+            f"{period_start} t/m {period_end}"
+        )
         return filtered
 
     def _parse_invoice(self, raw: dict) -> Invoice:

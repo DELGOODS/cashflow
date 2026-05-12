@@ -72,6 +72,12 @@ def run() -> int:
             )
             rolling_avg = rolling_average(payouts, window=12)
             logger.info(f"Rollend gemiddelde laatste 12 uitbetalingen: €{rolling_avg:.2f}")
+            # Schrijf rolling avg naar Instellingen!B20 — alleen als we minimaal 6 actuals hebben
+            if len(payouts) >= 6 and rolling_avg > 0:
+                writer.write_value("Instellingen!B20", round(rolling_avg, 2))
+            else:
+                writer.write_value("Instellingen!B20", "")
+                logger.info(f"Te weinig actuals ({len(payouts)}) voor betrouwbare rolling avg — leeg gelaten")
         except Exception as e:
             logger.exception(f"Sheets-fout: {e}")
 
