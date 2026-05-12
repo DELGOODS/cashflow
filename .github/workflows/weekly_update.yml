@@ -1,0 +1,35 @@
+name: Weekly Cashflow Update
+
+on:
+  schedule:
+    # Maandagen 04:00 UTC = 06:00 CEST (zomer) / 05:00 CET (winter)
+    # Wil je in winter ook 06:00 lokaal? Voeg dan toe: - cron: '0 5 * * 1'
+    - cron: '0 4 * * 1'
+  workflow_dispatch:  # Knop voor handmatig testen vanuit GitHub UI
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run cashflow update
+        env:
+          BOL_CLIENT_ID: ${{ secrets.BOL_CLIENT_ID }}
+          BOL_CLIENT_SECRET: ${{ secrets.BOL_CLIENT_SECRET }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          CASHFLOW_SHEET_ID: ${{ secrets.CASHFLOW_SHEET_ID }}
+        run: python -m src.main
