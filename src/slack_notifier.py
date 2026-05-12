@@ -35,7 +35,13 @@ def send_banksaldo_reminder(
     Block Kit-formaat: header + intro + actie-knop + context-info met laatste update.
     """
     link = build_sheet_link(sheet_id, banksaldo_cell)
-    today = date.today().strftime("%-d %B %Y")
+    _DUTCH_MONTHS = {
+        1: "januari", 2: "februari", 3: "maart", 4: "april",
+        5: "mei", 6: "juni", 7: "juli", 8: "augustus",
+        9: "september", 10: "oktober", 11: "november", 12: "december",
+    }
+    _today = date.today()
+    today = f"{_today.day} {_DUTCH_MONTHS[_today.month]} {_today.year}"
 
     context_lines: list[str] = []
     if actuals_written > 0:
@@ -56,7 +62,7 @@ def send_banksaldo_reminder(
             "text": {
                 "type": "mrkdwn",
                 "text": (
-                    f"Goedemorgen Martijn, het is {today}. "
+                    f"Goedemorgen, het is {today}. "
                     "Tijd om je banksaldo bij te werken voor de cashflowprognose. "
                     "Klik op de knop hieronder, je springt direct naar de juiste cel."
                 ),
