@@ -180,21 +180,22 @@ def build_format_requests(sheet_ids: dict[str, int]) -> list[dict]:
         {"textFormat": {"bold": True, "fontSize": 14}},
         "userEnteredFormat.textFormat",
     ))
-    # Section headers: A3, A7, A11, A15, A21, A36 → rows 2, 6, 10, 14, 20, 35
-    for row in [2, 6, 10, 14, 20, 35]:
+    # Section headers: A3, A7, A11, A15, A22, A36 → rows 2, 6, 10, 14, 21, 35
+    # (BOL OMZETVERWACHTING op rij 22 nu, met blanco rij 21 ervoor)
+    for row in [2, 6, 10, 14, 21, 35]:
         reqs.append(repeat_cell(
             grid_range(instellingen, row, row + 1, 0, 3),
             {"textFormat": {"bold": True, "fontSize": 11}, "backgroundColor": GRAY_HEADER},
             "userEnteredFormat(textFormat,backgroundColor)",
         ))
-    # Headers van Bol omzet tabel A22:B22 → row 21
+    # Headers van Bol omzet tabel A23:B23 → row 22
     reqs.append(repeat_cell(
-        grid_range(instellingen, 21, 22, 0, 2),
+        grid_range(instellingen, 22, 23, 0, 2),
         {"textFormat": {"bold": True}},
         "userEnteredFormat.textFormat",
     ))
     # Yellow editable cells:
-    # B4 (banksaldo), B16-B19 (forecast params), B23:B34 (Bol omzetverwachting)
+    # B4 (banksaldo), B16-B19 (forecast params), B24:B35 (Bol omzetverwachting per maand)
     reqs.append(repeat_cell(
         grid_range(instellingen, 3, 4, 1, 2),
         {"backgroundColor": YELLOW_EDITABLE},
@@ -206,9 +207,15 @@ def build_format_requests(sheet_ids: dict[str, int]) -> list[dict]:
         "userEnteredFormat.backgroundColor",
     ))
     reqs.append(repeat_cell(
-        grid_range(instellingen, 22, 34, 1, 2),
+        grid_range(instellingen, 23, 35, 1, 2),
         {"backgroundColor": YELLOW_EDITABLE},
         "userEnteredFormat.backgroundColor",
+    ))
+    # Witte achtergrond op blanco rij 21 (om eerdere yellow/gray styling op te ruimen)
+    reqs.append(repeat_cell(
+        grid_range(instellingen, 20, 21, 0, 3),
+        {"backgroundColor": WHITE, "textFormat": {"bold": False, "fontSize": 10}},
+        "userEnteredFormat(backgroundColor,textFormat)",
     ))
     # B20 rolling avg (auto, NOT editable, so light green to onderscheiden)
     reqs.append(repeat_cell(
@@ -235,9 +242,9 @@ def build_format_requests(sheet_ids: dict[str, int]) -> list[dict]:
         {"numberFormat": {"type": "CURRENCY", "pattern": "[$€-nl-NL] #,##0"}},
         "userEnteredFormat.numberFormat",
     ))
-    # B23:B34 Bol omzet: currency
+    # B24:B35 Bol omzet: currency
     reqs.append(repeat_cell(
-        grid_range(instellingen, 22, 34, 1, 2),
+        grid_range(instellingen, 23, 35, 1, 2),
         {"numberFormat": {"type": "CURRENCY", "pattern": "[$€-nl-NL] #,##0"}},
         "userEnteredFormat.numberFormat",
     ))
