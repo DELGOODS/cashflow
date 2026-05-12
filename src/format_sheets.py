@@ -160,6 +160,12 @@ def build_format_requests(sheet_ids: dict[str, int]) -> list[dict]:
         {"textFormat": {"bold": True}, "backgroundColor": GRAY_HEADER},
         "userEnteredFormat(textFormat,backgroundColor)",
     ))
+    # A5:A208 datum: date format (anders toont raw serial 46238 i.p.v. 04/08/2026)
+    reqs.append(repeat_cell(
+        grid_range(uitgaven, 4, 208, 0, 1),
+        {"numberFormat": {"type": "DATE", "pattern": "dd/mm/yyyy"}},
+        "userEnteredFormat.numberFormat",
+    ))
     # D5:D208 bedragen: currency
     reqs.append(repeat_cell(
         grid_range(uitgaven, 4, 208, 3, 4),
